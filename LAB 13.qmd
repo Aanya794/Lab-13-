@@ -1,0 +1,100 @@
+---
+title: "Lab 13"
+author: "Aanya Patel"
+format:
+  html:
+    toc: true
+    toc_float: true
+    embed-resources: true
+execute: 
+  warning: false
+  message: false
+---
+
+```{r}
+library(tidyverse)
+library(vegan)
+library(geosphere)   
+library(ggplot2)
+
+
+```
+
+```{r}
+
+df <- read_csv("~/Lab 13/NEON_soilMAGs_soilChem.csv")
+
+
+df_comm <- df %>%
+  filter(!is.na(phylum), !is.na(genomicsSampleID)) %>%
+  mutate(sampleid = as.character(genomicsSampleID),
+         phylum   = as.character(phylum))
+
+```
+
+Mapping taxa distributions
+
+```{r}
+acidobacteria <- df %>%
+  filter(phylum == "Acidobacteriota", !is.na(decimalLatitude), !is.na(decimalLongitude))
+
+ggplot(acidobacteria, aes(x = decimalLongitude, y = decimalLatitude)) +
+  geom_point(color = "darkgreen", alpha = 0.6) +
+  labs(title = "Geographic distribution of Acidobacteriota",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal()
+
+```
+
+Spatial autocorrelation (Mantel test)
+
+```{r}
+# Build abundance matrix (samples x phyla)
+abundance_matrix <- df_comm %>%
+  count(sampleid, phylum, name = "count") %>%
+  pivot_wider(names_from = phylum, values_from = count, values_fill = 0)
+
+# Geographic coordinates per sample
+coords <- df %>%
+  select(genomicsSampleID, decimalLatitude, decimalLongitude) %>%
+  distinct() %>%
+  filter(!is.na(decimalLatitude), !is.na(decimalLongitude))
+
+# Match order with abundance matrix
+coords <- coords %>% filter(genomicsSampleID %in% abundance_matrix$sampleid)
+abund <- abundance_matrix %>% filter(sampleid %in% coords$genomicsSampleID)
+
+# Community dissimilarity (Bray-Curtis)
+comm_dist <- vegdist(abund %>% select(-sampleid), method = "bray")
+
+# Geographic distance matrix (km)
+geo_dist <- distm(coords %>% select(decimalLongitude, decimalLatitude)) / 1000
+
+# Mantel test
+mantel_result <- mantel(comm_dist, as.dist(geo_dist), method = "spearman")
+print(mantel_result)
+
+```
+
+Distance‑decay analysis
+
+```{r}
+# Convert to similarity
+comm_sim <- 1 - as.matrix(comm_dist)
+geo_dist_mat <- as.matrix(geo_dist)
+
+# Pairwise dataframe
+pairs_df <- expand.grid(i = 1:nrow(comm_sim), j = 1:nrow(comm_sim)) %>%
+  filter(i < j) %>%
+  mutate(similarity = comm_sim[cbind(i,j)],
+         distance_km = geo_dist_mat[cbind(i,j)])
+
+# Plot
+ggplot(pairs_df, aes(x = distance_km, y = similarity)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  labs(title = "Distance-decay of community similarity",
+       x = "Geographic distance (km)", y = "Community similarity (1 - Bray-Curtis)") +
+  theme_minimal()
+
+```
