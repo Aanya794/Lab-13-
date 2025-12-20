@@ -1,0 +1,319 @@
+---
+title: "lab7"
+Author: "Aanya Patel"
+format:
+  html:
+    toc: true
+    toc_float: true
+    embed-resources: true
+execute: 
+  warning: false
+  message: false
+---
+
+### **Lab 7 : Data Tidying, Transformation and Visualization with COVID-19 reporting data**
+
+```{r}
+library(tidyverse)
+library(lubridate)
+```
+
+```{r}
+ dir.create("data", showWarnings = FALSE)
+
+download.file(
+  url = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv",
+  destfile = "data/time_series_covid19_confirmed_global.csv"
+)
+destfile = "data/confirmed_cases_global.csv"
+#| eval: false
+
+# Create the folder if it doesn't exist
+dir.create("data", showWarnings = FALSE)
+
+
+
+
+```
+
+```{r}
+time_series_confirmed <- read_csv("data/time_series_covid19_confirmed_global.csv")|>
+  rename(Province_State = "Province/State", Country_Region = "Country/Region")
+```
+
+```{r}
+time_series_confirmed_long <- time_series_confirmed |> 
+               pivot_longer(-c(Province_State, Country_Region, Lat, Long),
+                            names_to = "Date", values_to = "Confirmed") 
+```
+
+#### **Making Graphs from the time series data**
+
+```{r}
+time_series_confirmed_long|> 
+  group_by(Country_Region, Date) |> 
+  summarise(Confirmed = sum(Confirmed)) |> 
+  filter (Country_Region == "US") |> 
+  ggplot(aes(x = Date,  y = Confirmed)) + 
+    geom_point() +
+    geom_line() +
+    ggtitle("US COVID-19 Confirmed Cases")
+```
+
+Now several countries on the same graph
+
+```{r}
+time_series_confirmed_long |> 
+    group_by(Country_Region, Date) |> 
+    summarise(Confirmed = sum(Confirmed)) |> 
+    filter (Country_Region %in% c("China","France","Italy", 
+                                "Korea, South", "US")) |> 
+    ggplot(aes(x = Date,  y = Confirmed, color = Country_Region)) + 
+      geom_point() +
+      geom_line() +
+      ggtitle("COVID-19 Confirmed Cases")
+```
+
+```{r}
+time_series_confirmed_long_daily <-time_series_confirmed_long |> 
+    group_by(Country_Region, Date) |> 
+    summarise(Confirmed = sum(Confirmed)) |> 
+    mutate(Daily = Confirmed - lag(Confirmed, default = first(Confirmed )))
+```
+
+```{r}
+time_series_confirmed_long_daily |> 
+    filter (Country_Region == "US") |> 
+    ggplot(aes(x = Date,  y = Daily, color = Country_Region)) + 
+      geom_point() +
+      ggtitle("COVID-19 Confirmed Cases")
+```
+
+Line Graph
+
+```{r}
+time_series_confirmed_long_daily |> 
+  filter(Country_Region == "US") |> 
+  mutate(Date = as.Date(Date)) |>  # ensure Date is in Date format
+  ggplot(aes(x = Date, y = Daily, color = Country_Region)) +
+    geom_line() +
+    scale_x_date(
+      breaks = as.Date(c("2020-01-01", "2021-01-01", "2022-01-01", "2023-01-01")),
+      labels = c("2020", "2021", "2022", "2023")
+    ) +
+    scale_y_continuous(
+      breaks = c(0,5e05, 1e06),
+      labels = scales::scientific_format()
+    ) +
+    labs(
+      title = "COVID-19 Confirmed Cases",
+      x = "Date",
+      y = "Daily Confirmed Cases"
+    ) +
+    theme_minimal()
+
+
+```
+
+```{r}
+
+
+time_series_confirmed_long_daily |>
+  filter(Country_Region == "US") |>
+  ggplot(aes(x = Date, y = Daily, color = Country_Region)) +
+    geom_smooth() +
+    ggtitle("COVID-19 Confirmed Cases")
+
+
+```
+
+```{r}
+time_series_confirmed_long_daily |>
+  filter(Country_Region == "US") |>
+  ggplot(aes(x = Date, y = Daily)) +
+    geom_point(color = "gray") +
+    geom_smooth(method = "gam", se = FALSE, color = "blue") +
+    ggtitle("COVID-19 Daily Confirmed Cases (US)")
+
+```
+
+#### **Animated Graphs with gganimate**
+
+#### 
+
+```{r}
+library(gganimate)
+library(gifski)
+theme_set(theme_bw())
+```
+
+```{r}
+
+
+```
+
+### **Animation of confirmed deaths**
+
+```{r}
+
+download.file(url="https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv", 
+  destfile = "data/time_series_covid19_deaths_global.csv")
+```
+
+```{r}
+time_series_deaths_confirmed <- read_csv("data/time_series_covid19_deaths_global.csv")|>
+  rename(Province_State = "Province/State", Country_Region = "Country/Region")
+
+time_series_deaths_long <- time_series_deaths_confirmed |> 
+    pivot_longer(-c(Province_State, Country_Region, Lat, Long),
+        names_to = "Date", values_to = "Confirmed") 
+
+time_series_deaths_long$Date <- mdy(time_series_deaths_long$Date)
+```
+
+```{r}
+p <- time_series_deaths_long |>
+  filter (Country_Region %in% c("US","Canada", "Mexico","Brazil","Egypt","Ecuador","India", "Netherlands", "Germany", "China" )) |>
+  ggplot(aes(x=Country_Region, y=Confirmed, color= Country_Region)) + 
+    geom_point(aes(size=Confirmed)) + 
+    transition_time(Date) + 
+    labs(title = "Cumulative Deaths: {frame_time}") + 
+    ylab("Deaths") +
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+# make the animation
+animate(p, renderer = gifski_renderer(), end_pause = 15)
+```
+
+### **Exercises**
+
+#### **Exercise 1**
+
+```{r}
+library(tidyr)
+library(dplyr)
+
+table4a |> 
+  pivot_longer(cols = -country, names_to = "year", values_to = "cases")
+
+```
+
+#### **Exercise 2**
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+countries <- c("US", "Italy", "India", "Brazil", "France")
+
+time_series_confirmed_long_daily |> 
+  filter(Country_Region %in% countries) |> 
+  ggplot(aes(x = Date, y = Daily)) +
+    geom_line(color = "steelblue") +
+    facet_wrap(~Country_Region, scales = "free_y") +
+    ggtitle("Daily Confirmed COVID-19 Cases by Country")
+
+```
+
+#### **Exercise 3**
+
+```{r}
+time_series_confirmed_long_daily |> 
+  filter(Country_Region %in% countries) |> 
+  ggplot(aes(x = Date, y = Daily, color = Country_Region)) +
+    geom_line() +
+    ggtitle("Daily Confirmed COVID-19 Cases")
+
+```
+
+#### **Exercise 4**
+
+```{r}
+library(tidyverse)
+
+deaths_raw <- read_csv("data/time_series_covid19_deaths_global.csv")
+deaths_long <- deaths_raw |>
+  pivot_longer(cols = matches("^\\d"), names_to = "Date", values_to = "Deaths") |>
+  mutate(Date = as.Date(Date, format = "%m/%d/%y"))
+deaths_country <- deaths_long |>
+  group_by(`Country/Region`, Date) |>
+  summarise(Deaths = sum(Deaths), .groups = "drop") |>
+  filter(`Country/Region` %in% c("US", "Canada", "Mexico"))
+ggplot(deaths_country, aes(x = Date, y = Deaths, color = `Country/Region`)) +
+  geom_line(size = 1) +
+  labs(title = "Cumulative COVID-19 Deaths", x = "Date", y = "Deaths", color = "Country") +
+  theme_minimal()
+```
+
+#### **Exercise 5**
+
+```{r}
+library(tidyverse)
+
+deaths_raw <- read_csv("data/time_series_covid19_deaths_global.csv")
+
+deaths_long <- deaths_raw |>
+  pivot_longer(cols = matches("^\\d"), names_to = "Date", values_to = "Deaths") |>
+  mutate(Date = as.Date(Date, format = "%m/%d/%y"))
+deaths_country <- deaths_long |>
+  group_by(`Country/Region`, Date) |>
+  summarise(Deaths = sum(Deaths), .groups = "drop")
+deaths_daily <- deaths_country |>
+  group_by(`Country/Region`) |>
+  arrange(Date) |>
+  mutate(Daily_Deaths = Deaths - lag(Deaths, default = 0)) |>
+  ungroup()
+selected_countries <- c("US", "Brazil", "India")
+deaths_daily |>
+  filter(`Country/Region` %in% selected_countries) |>
+  ggplot(aes(x = Date, y = Daily_Deaths, color = `Country/Region`)) +
+  geom_line(size = 1) +
+  labs(title = "Daily COVID-19 Deaths", x = "Date", y = "Daily Deaths", color = "Country") +
+  theme_minimal()
+
+```
+
+#### **Exercise 6**
+
+```{r}
+library(tidyverse)
+library(gganimate)
+library(gifski)
+
+# Load the dataset
+deaths_raw <- read_csv("data/time_series_covid19_deaths_global.csv")
+
+# Reshape to long format
+deaths_long <- deaths_raw |>
+  pivot_longer(cols = matches("^\\d"), names_to = "Date", values_to = "Deaths") |>
+  mutate(Date = as.Date(Date, format = "%m/%d/%y"))
+
+# Aggregate by country and date
+deaths_country <- deaths_long |>
+  group_by(`Country/Region`, Date) |>
+  summarise(Deaths = sum(Deaths), .groups = "drop")
+
+# Calculate daily deaths
+deaths_daily <- deaths_country |>
+  group_by(`Country/Region`) |>
+  arrange(Date) |>
+  mutate(Daily_Deaths = Deaths - lag(Deaths, default = 0)) |>
+  ungroup()
+
+# Choose countries for animation
+selected_countries <- c("US", "Brazil", "India")
+
+# Filter and animate
+animated_plot <- deaths_daily |>
+  filter(`Country/Region` %in% selected_countries) |>
+  ggplot(aes(x = Date, y = Daily_Deaths, color = `Country/Region`)) +
+  geom_line(size = 1) +
+  labs(title = "Daily COVID-19 Deaths Over Time", x = "Date", y = "Daily Deaths", color = "Country") +
+  theme_minimal() +
+  transition_reveal(Date)
+
+# Save the animation as a GIF
+anim <- animate(animated_plot, width = 800, height = 500, end_pause = 15)
+anim_save("daily_deaths.gif", animation = anim)
+
+
+```
